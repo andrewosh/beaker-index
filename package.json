@@ -10,8 +10,11 @@
   "author": "Paul Frazee <pfrazee@gmail.com>",
   "license": "MIT",
   "dependencies": {
-    "hyperdrive": "git+https://github.com/hypercore-protocol/hyperdrive#hyperspace-port",
-    "hyperspace": "github:hyperspace-org/hyperspace#master",
-    "got": "^11.3.0"
+    "@corestore/networker": "^1.0.3",
+    "corestore": "^5.7.3",
+    "got": "^11.3.0",
+    "hyperbee": "0.0.3",
+    "hyperdrive": "^10.17.0",
+    "nanoresource-promise": "^2.0.0"
   }
 }
