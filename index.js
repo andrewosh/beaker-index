@@ -132,7 +132,7 @@ module.exports = class BeakerIndexer extends Nanoresource {
     }
 
     const lastDriveVersion = (lastVersions && lastVersions.drive) || 0
-    const diffStream = drive.createDiffStream(lastDriveVersion, '/')
+    const diffStream = drive.createDiffStream(lastDriveVersion, '/', { noMounts: true })
 
     const batch = []
     var changes = null
