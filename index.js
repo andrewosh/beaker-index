@@ -57,6 +57,7 @@ module.exports = class BeakerIndexer extends Nanoresource {
         // When running on a cloud instance, there can be lots of persistent connections.
         maxPeers: 10000
       })
+      await this.networker.listen()
       registerCoreTimeouts(this.networker, this.store)
     }
 
@@ -69,6 +70,11 @@ module.exports = class BeakerIndexer extends Nanoresource {
 
     const announce = this.core.writable
     await this.networker.configure(this.core.discoveryKey, { announce, lookup: !announce })
+    if (announce) {
+      const dht = this.networker.swarm.network.discovery.dht
+      dht.concurrency = 51
+      dht.concurrencyRPS = 100
+    }
 
     this.firehose = new FirehoseIndexer(this.db)
     this.subscriptions = new SubscriptionsIndexer(this.db)
@@ -101,6 +107,18 @@ module.exports = class BeakerIndexer extends Nanoresource {
     this.networker.configure(userDrive.discoveryKey, { announce: false, lookup: true, flush: true })
     return userDrive
   }
+
+    /*
+  async _getUsersList () {
+    let keys = (await fs.readFile('./output.txt', { encoding: 'utf8' })).split('\n')
+    keys = keys.filter(k => !!k)
+    return keys.map(k => ({
+      url: 'hyper://' + k,
+      title: 'blah',
+      description: 'blah'
+    }))
+  }
+  */
 
   async _getUsersList () {
     try {
