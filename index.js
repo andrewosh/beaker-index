@@ -3,23 +3,24 @@ const hyperdrive = require('hyperdrive')
 const HyperBee = require('hyperbee')
 const Corestore = require('corestore')
 const CorestoreNetworker = require('@corestore/networker')
+const registerCoreTimeouts = require('hypercore-networking-timeouts')
 const got = require('got')
 
 const TaskQueue = require('./lib/queue')
 const FirehoseIndexer = require('./lib/indexers/firehose')
-const SubscriptionsIndexer = require('./lib/indexer/subscriptions')
-const { normalizeUrl, collectStream } = require('./lib/util')
+const SubscriptionsIndexer = require('./lib/indexers/subscriptions')
+const { dbBatch, toKey, normalizeUrl, collectStream } = require('./lib/util')
 
 const NAMESPACE = 'beaker-index'
-const NEW_USER_CHECK_INTERVAL = 10000
+const NEW_USER_CHECK_INTERVAL = 1000 * 60 * 2
 const CONCURRENT_TASK_LIMIT = 20
 
-class BeakerIndexer extends Nanoresource {
+module.exports = class BeakerIndexer extends Nanoresource {
   constructor (store, networker, key, opts = {}) {
+    super()
     this.store = store
     this.networker = networker
     this.key = key
-
 
     // Set in _open.
     this.core = null
@@ -36,12 +37,17 @@ class BeakerIndexer extends Nanoresource {
     this._watching = new Set()
     this._watchers = []
     this._indexers = null
+
+    this.indexerVersion = getIndexerVersion()
+    this.ready = this.open.bind(this)
   }
 
   // Nanoresource Methods
 
   async _open () {
-    if (!this.store) this.store = new Corestore('./data')
+    if (!this.store) this.store = new Corestore('./data', {
+      cacheSize: 10000
+    })
     this.store = this.store.namespace(NAMESPACE)
     await this.store.ready()
 
@@ -50,10 +56,11 @@ class BeakerIndexer extends Nanoresource {
         // When running on a cloud instance, there can be lots of persistent connections.
         maxPeers: 10000
       })
+      registerCoreTimeouts(this.networker, this.store)
     }
 
     this.core = this.key ? this.store.get(key) : this.store.default()
-    this.db = new HyperBee(core, {
+    this.db = new HyperBee(this.core, {
       keyEncoding: 'utf8',
       valueEncoding: 'json'
     })
@@ -69,32 +76,29 @@ class BeakerIndexer extends Nanoresource {
 
   async _close () {
     if (this._watchTimer) clearInterval(this._watchTimer)
-    for (const unwatch of this.unwatches) unwatch()
+    for (const watcher of this._watchers) watcher.destroy()
     await this.networker.close()
     await this.store.close()
   }
 
   // Indexing-Mode Methods
 
-  async _lastVersionKey (url) {
-    return `${url}/last-version` 
+  _lastVersionKey (url) {
+    return toKey('last-version', url)
   }
 
-  async _getLastVersion (url) {
-    const versionRecord = await this.db.get(this._lastVersionKey(url))
+  async _getLastVersions (url) {
+    console.log('GETTING LAST VERSION')
+    let versionRecord = await this.db.get(this._lastVersionKey(url))
     if (!versionRecord) return null
-    return versionRecord.version
-  }
-
-  async _recordLastVersion (url, version) {
-    return { type: 'put', key: this._lastVersionKey(url), value: { version } }
+    return versionRecord.value
   }
 
   async _loadDrive (url) {
     const key = urlToKey(url)
     const userDrive = hyperdrive(this.store, key)
     await userDrive.promises.ready()
-    await this.networker.configure(userDrive.discoveryKey, { announce: false, lookup: true, flush: true })
+    this.networker.configure(userDrive.discoveryKey, { announce: false, lookup: true, flush: true })
     return userDrive
   }
 
@@ -105,6 +109,7 @@ class BeakerIndexer extends Nanoresource {
       console.error(e)
       throw new Error('Failed to fetch users')
     }
+    this.emit('fetched-user-list', res.body.users)
     return res.body.users.map(user => ({
       url: normalizeUrl(user.driveUrl),
       title: user.title,
@@ -113,11 +118,23 @@ class BeakerIndexer extends Nanoresource {
   }
 
   async _indexChanges (user, drive) {
-    const currentVersion = drive.version
-    const diffStream = drive.createDiffStream(lastVersion, '/')
-    const lastVersion = await this._getLastVersion(user.url) || 0
+    this.emit('indexing-user', user.url)
+    const currentDriveVersion = drive.version
+    let lastVersions = await this._getLastVersions(user.url)
+    if (lastVersions) {
+      const sameDriveVersion = currentDriveVersion === lastVersions.drive
+      const sameIndexerVersion = this.indexerVersion === lastVersions.indexer
+      // TODO: Support incrementally updating each index individually.
+      if (sameDriveVersion && sameIndexerVersion) {
+        this.emit('skipping-user', user.url)
+        return
+      }
+    }
 
-    const changes = await collectStream(diffStream)
+    const lastDriveVersion = (lastVersions && lastVersions.drive) || 0
+    const diffStream = drive.createDiffStream(lastDriveVersion, '/')
+
+    const changes = await collectStream(diffStream, drive, { lastDriveVersion })
     const batch = []
     for (const change of changes) {
       for (const indexer of this._indexers) {
@@ -125,93 +142,43 @@ class BeakerIndexer extends Nanoresource {
         batch.push(...newRecords)
       }
     }
-    batch.push(this._recordLastVersion(user.url, currentVersion))
-    return this.db.batch(batch)
+    batch.push({ type: 'put', key: this._lastVersionKey(user.url), value: {
+      drive: currentDriveVersion,
+      indexer: this.indexerVersion
+    }})
+    this.emit('indexed-user', user.url, batch)
+    return dbBatch(this.db, batch)
   }
 
   // Public Methods
 
-  async startIndexing () {
-    this._watchTimer = setInterval(async () => {
+  startIndexing () {
+    const tick = async () => {
       try {
         const users = await this._getUsersList()
+        this.emit('fetched-users', users)
         for (const user of users) {
-          if (watching.has(user.url)) continue
+          if (this._watching.has(user.url)) continue
+          this._watching.add(user.url)
+          this.emit('watching-user', user.url)
           const drive = await this._loadDrive(user.url)
           // Watch the top-level trie only so that we don't get triggered by mounts.
-          const watcher = drive.db.trie.watch(() => queue.push(() => this._indexChanges(user, drive)))
+          const watcher = drive.db.trie.watch(() => {
+            this.emit('user-changed', user.url)
+            this._queue.push(() => this._indexChanges(user, drive))
+          })
           this._watchers.push(watcher)
         }
       } catch (err) {
         this.emit('watch-error', err)
       }
-    }, NEW_USER_CHECK_INTERVAL)
+    }
+    this._watchTimer = setInterval(tick, NEW_USER_CHECK_INTERVAL)
+    tick()
   }
 }
 
-main()
 async function main () {
-  const store = new Corestore('./data').namespace(NAMESPACE)
-  await store.ready()
-
-  const networker = new CorestoreNetworker(store, {
-    // When running on a cloud instance, there can be lots of persistent connections.
-    maxPeers: 10000
-  })
-  
-  await networker.configure(core.discoveryKey, { announce: true, lookup: false })
-
-  const watching = new Set()
-  const watchers = []
-
-  setInterval(watchUsers, NEW_USER_CHECK_INTERVAL)
-
-  function indexDiffStream (user, diffStream) {
-    const changes = await collectStream(diffStream)
-    for (const change of changes) {
-
-    }
-  }
-
-  async function watchUsers () {
-    console.log('Checking for new users...')
-    const users = await getUsersList()
-    for (const user of users) {
-      if (watching.has(user.url)) continue
-      await watchUser(user)
-    }
-  }
-
-  async function watchUser (user) {
-    console.log('Watching user:', user.url)
-    const drive = await loadDrive(networker, user.url)
-    // Watch the top-level trie only so that we don't get triggered by mounts.
-    const watcher = drive.db.trie.watch(() => queue.push(() => onChange(user, drive)))
-    watchers.push(watcher)
-  }
-
-  async function onChange (user, drive) {
-    console.log(`Watch triggered for drive ${user.url}. Indexing...`)
-    const currentVersion = drive.version
-    const diffStream = drive.createDiffStream(lastVersion, '/')
-    const lastVersion = await getLastVersion(user.url) || 0
-    await indexDiffStream(user, diffStream)
-    await recordLastVersion(user.url, currentVersion)
-  }
-
-  function lastVersionKey (url) {
-    return `${url}/last-version` 
-  }
-
-  async function getLastVersion (url) {
-    const versionRecord = await db.get(lastVersionKey(url))
-    if (!versionRecord) return null
-    return versionRecord.version
-  }
-
-  async function recordLastVersion (url, version) {
-    return db.put(lastVersionKey(url), { version })
-  }
 
   while (true) {
     console.log('Indexer tick', (new Date()).toLocaleString())
@@ -284,6 +251,7 @@ async function getUsersList () {
     console.error(e)
     throw new Error('Failed to fetch users')
   }
+  this.emit('fetched-users', res.body.users)
   return res.body.users.map(user => ({
     url: normalizeUrl(user.driveUrl),
     title: user.title,
@@ -349,6 +317,18 @@ async function indexLinks (db, user, userDrive) {
       })
     }
   }
+}
+
+function getIndexerVersion () {
+  console.log('versions:', SubscriptionsIndexer.VERSION, FirehoseIndexer.VERSION)
+  return [
+    SubscriptionsIndexer.VERSION,
+    FirehoseIndexer.VERSION
+  ].join()
+}
+
+function urlToKey (url) {
+  return Buffer.from(/([0-9a-f]{64})/i.exec(url)[1], 'hex')
 }
 
 function deepEqual (x, y) {
