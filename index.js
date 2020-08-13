@@ -89,7 +89,6 @@ module.exports = class BeakerIndexer extends Nanoresource {
   }
 
   async _getLastVersions (url) {
-    console.log('GETTING LAST VERSION')
     let versionRecord = await this.db.get(this._lastVersionKey(url))
     if (!versionRecord) return null
     return versionRecord.value
@@ -128,19 +127,19 @@ module.exports = class BeakerIndexer extends Nanoresource {
       // TODO: Support incrementally updating each index individually.
       if (sameDriveVersion && sameIndexerVersion) {
         this.emit('skipping-user', user.url)
-        return
+        return null
       }
     }
 
     const lastDriveVersion = (lastVersions && lastVersions.drive) || 0
     const diffStream = drive.createDiffStream(lastDriveVersion, '/')
 
+    const batch = []
     var changes = null
     try {
       changes = await collectStream(diffStream, drive, { lastDriveVersion })
     } catch (err) {
       // If the diff stream could not complete. Do not proceed.
-      console.log('INDEXING ERROR')
       this.emit('indexing-error', err, user.url)
     }
     if (!changes) return null
