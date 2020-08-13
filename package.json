@@ -16,6 +16,7 @@
     "hyperbee": "0.0.3",
     "hypercore-networking-timeouts": "^1.0.3",
     "hyperdrive": "^10.17.0",
+    "mutexify": "^1.3.0",
     "nanoresource-promise": "^2.0.0"
   }
 }

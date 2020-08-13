@@ -145,7 +145,10 @@ module.exports = class BeakerIndexer extends Nanoresource {
     if (!changes) return null
     for (const change of changes) {
       for (const indexer of this._indexers) {
-        const newRecords = await indexer.process(user, drive, change)
+        var newRecords = []
+        try {
+          newRecords = await indexer.process(user, drive, change)
+        } catch (err) {}
         batch.push(...newRecords)
       }
     }

@@ -13,7 +13,10 @@ async function start () {
   indexer.on('skipping-user', url => console.log(` ** Skipping User: ${url}`))
   indexer.on('indexed-user', (url, batch) => console.log(` ** Indexed User: ${url}, Batch: ${batch}`))
   indexer.on('watch-error', err => console.error(`Watch Errored: ${err}`))
-  indexer.on('indexing-error', (err, url) => console.error(`Could Not Index ${url}: ${err}`))
+  indexer.on('indexing-error', (err, url) => {
+    console.error(`Could Not Index ${url}: ${err}`)
+    console.error('ERR:', err)
+  })
   indexer.on('fetched-users', users => console.log(` ### Fetched ${users.length} Users.`))
 
   setInterval(() => {
@@ -32,7 +35,7 @@ async function start () {
   async function cleanup () {
     try {
       console.log('Waiting for indexer to close...')
-      await indexer.close()
+      // await indexer.close()
     } catch (err) {
       console.error('Close Errored:', err)
       process.exit(1)
