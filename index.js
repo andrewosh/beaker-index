@@ -46,7 +46,8 @@ module.exports = class BeakerIndexer extends Nanoresource {
 
   async _open () {
     if (!this.store) this.store = new Corestore('./data', {
-      cacheSize: 10000
+      cacheSize: 10000,
+      ifAvailable: true
     })
     this.store = this.store.namespace(NAMESPACE)
     await this.store.ready()
