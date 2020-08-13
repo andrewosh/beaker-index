@@ -1,3 +1,4 @@
+const repl = require('repl')
 const BeakerIndexer = require('.')
 
 start()
@@ -19,18 +20,27 @@ async function start () {
   })
   indexer.on('fetched-users', users => console.log(` ### Fetched ${users.length} Users.`))
 
-  setInterval(() => {
-    console.log()
-    console.log(' !!! ')
-    console.log('Queue Length: ', indexer._queue.queue.length)
-    console.log('Running: ', indexer._queue._running)
-    console.log()
-  }, 2000)
-
   console.log('Starting Beaker indexer...')
   await indexer.ready()
-  console.log('Indexing into: ', indexer.core.key.toString('hex'))
-  indexer.startIndexing()
+
+  const cmd = process.argv[2]
+  if (!cmd || cmd === 'start') {
+    console.log('Indexing into: ', indexer.core.key.toString('hex'))
+    indexer.startIndexing()
+    setInterval(() => {
+      console.log()
+      console.log(' !!! ')
+      console.log('Task Queue Length: ', indexer._queue.queue.length)
+      console.log('Running Tasks: ', indexer._queue._running)
+      console.log()
+    }, 2000)
+  } else if (cmd === 'repl') {
+    console.log('Launching REPL...')
+    const r = repl.start({
+      useGlobal: true
+    })
+    r.context.indexer = indexer
+  }
 
   async function cleanup () {
     try {
