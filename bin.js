@@ -3,7 +3,8 @@ const BeakerIndexer = require('.')
 
 start()
 async function start () {
-  const indexer = new BeakerIndexer()
+  const key = process.argv[3] ? Buffer.from(process.argv[3], 'hex') : null
+  const indexer = new BeakerIndexer(null, null, key)
 
   process.on('SIGINT', cleanup)
   process.on('SIGTERM', cleanup)

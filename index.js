@@ -61,7 +61,7 @@ module.exports = class BeakerIndexer extends Nanoresource {
       registerCoreTimeouts(this.networker, this.store)
     }
 
-    this.core = this.key ? this.store.get(key) : this.store.default()
+    this.core = this.key ? this.store.get(this.key) : this.store.default()
     this.db = new HyperBee(this.core, {
       keyEncoding: 'utf8',
       valueEncoding: 'json'
