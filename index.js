@@ -32,7 +32,7 @@ module.exports = class BeakerIndexer extends Nanoresource {
       maxConcurrent: CONCURRENT_TASK_LIMIT,
       ...opts
     })
-    this._queue.on('task-error', err => this.emit('indexing-error', 'err'))
+    this._queue.on('task-error', err => this.emit('indexing-error', err))
     this._watchTimer = null
     this._watching = new Set()
     this._watchers = []
@@ -135,18 +135,27 @@ module.exports = class BeakerIndexer extends Nanoresource {
     const lastDriveVersion = (lastVersions && lastVersions.drive) || 0
     const diffStream = drive.createDiffStream(lastDriveVersion, '/')
 
-    const changes = await collectStream(diffStream, drive, { lastDriveVersion })
-    const batch = []
+    var changes = null
+    try {
+      changes = await collectStream(diffStream, drive, { lastDriveVersion })
+    } catch (err) {
+      // If the diff stream could not complete. Do not proceed.
+      console.log('INDEXING ERROR')
+      this.emit('indexing-error', err, user.url)
+    }
+    if (!changes) return null
     for (const change of changes) {
       for (const indexer of this._indexers) {
         const newRecords = await indexer.process(user, drive, change)
         batch.push(...newRecords)
       }
     }
+
     batch.push({ type: 'put', key: this._lastVersionKey(user.url), value: {
       drive: currentDriveVersion,
       indexer: this.indexerVersion
     }})
+
     this.emit('indexed-user', user.url, batch)
     return dbBatch(this.db, batch)
   }

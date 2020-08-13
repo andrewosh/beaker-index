@@ -13,7 +13,7 @@ async function start () {
   indexer.on('skipping-user', url => console.log(` ** Skipping User: ${url}`))
   indexer.on('indexed-user', (url, batch) => console.log(` ** Indexed User: ${url}, Batch: ${batch}`))
   indexer.on('watch-error', err => console.error(`Watch Errored: ${err}`))
-  indexer.on('indexing-error', err => console.error(`Indexing Errored: ${err}`))
+  indexer.on('indexing-error', (err, url) => console.error(`Could Not Index ${url}: ${err}`))
   indexer.on('fetched-users', users => console.log(` ### Fetched ${users.length} Users.`))
 
   setInterval(() => {
