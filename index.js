@@ -13,7 +13,7 @@ const { dbBatch, toKey, normalizeUrl, collectStream } = require('./lib/util')
 
 const NAMESPACE = 'beaker-index'
 const NEW_USER_CHECK_INTERVAL = 1000 * 60 * 2
-const CONCURRENT_TASK_LIMIT = 20
+const CONCURRENT_TASK_LIMIT = 40
 
 module.exports = class BeakerIndexer extends Nanoresource {
   constructor (store, networker, key, opts = {}) {
