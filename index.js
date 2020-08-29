@@ -71,9 +71,12 @@ module.exports = class BeakerIndexer extends Nanoresource {
     const announce = this.core.writable
     await this.networker.configure(this.core.discoveryKey, { announce, lookup: !announce })
     if (announce) {
+      // TODO: This won't work with hyperspace.
+      /*
       const dht = this.networker.swarm.network.discovery.dht
       dht.concurrency = 51
       dht.concurrencyRPS = 100
+      */
     }
 
     this.firehose = new FirehoseIndexer(this.db)

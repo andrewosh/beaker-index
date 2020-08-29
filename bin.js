@@ -1,3 +1,4 @@
+const p = require('path')
 const repl = require('repl')
 const HypercloudClient = require('hypercloud-client')
 const BeakerIndexer = require('.')
@@ -45,7 +46,7 @@ async function start () {
   } else if (cmd === 'deploy') {
     console.log('Deploying indexer as a cloud service...')
     const client = new HypercloudClient()
-    const result = await client.spawn('..')
+    const result = await client.spawn(p.join(__dirname, 'service'))
     console.log('Indexer deployed. Running with key:', result.key)
   }
 
