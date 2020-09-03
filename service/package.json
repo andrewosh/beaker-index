@@ -10,6 +10,6 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "beaker-index": "^0.0.2"
+    "beaker-index": "^0.0.3"
   }
 }

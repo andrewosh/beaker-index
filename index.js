@@ -112,6 +112,7 @@ module.exports = class BeakerIndexer extends Nanoresource {
     await userDrive.promises.ready()
     this.networker.configure(userDrive.discoveryKey, {
       announce: this._announceUserDrives,
+      remember: this._announceUserDrives,
       lookup: true,
       flush: true
     })
