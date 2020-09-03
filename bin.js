@@ -30,6 +30,12 @@ async function start () {
     const client = new HypercloudClient()
     const result = await client.services.spawn(p.join(__dirname, 'service'), { name: 'beaker-indexer' })
     console.log('Indexer deployed. Running with key:', result.key)
+  } else if (cmd === 'service-info') {
+    const name = process.argv[3]
+    if (!name) throw new Error('Must provide a service name.')
+    const client = new HypercloudClient()
+    const res = await client.services.info(name)
+    console.log(JSON.stringify(res, null, 2))
   }
 }
 
