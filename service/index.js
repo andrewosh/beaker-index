@@ -8,7 +8,9 @@ async function start (client) {
   if (indexer) return { key: indexer.key.toString('hex') }
   const store = client.corestore().namespace(NAMESPACE)
   const networker = client.network
-  indexer = new BeakerIndexer(store, networker, null)
+  indexer = new BeakerIndexer(store, networker, null, {
+    announceUserDrives: true
+  })
   await indexer.ready()
 
   indexer.on('watching-user', url => console.log(`Watching User: ${url}`))

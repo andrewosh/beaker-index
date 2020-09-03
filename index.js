@@ -9,11 +9,12 @@ const got = require('got')
 const TaskQueue = require('./lib/queue')
 const FirehoseIndexer = require('./lib/indexers/firehose')
 const SubscriptionsIndexer = require('./lib/indexers/subscriptions')
+const BacklinksIndexer = require('./lib/indexers/backlinks')
 const { dbBatch, toKey, normalizeUrl, collectStream } = require('./lib/util')
 
 const NAMESPACE = 'beaker-index'
 const NEW_USER_CHECK_INTERVAL = 1000 * 60 * 2
-const CONCURRENT_TASK_LIMIT = 20
+const CONCURRENT_TASK_LIMIT = 100
 
 module.exports = class BeakerIndexer extends Nanoresource {
   constructor (store, networker, key, opts = {}) {
@@ -37,6 +38,7 @@ module.exports = class BeakerIndexer extends Nanoresource {
     this._watching = new Set()
     this._watchers = []
     this._indexers = null
+    this._announceUserDrives = !!opts.announceUserDrives
 
     this.indexerVersion = getIndexerVersion()
     this.ready = this.open.bind(this)
@@ -81,7 +83,8 @@ module.exports = class BeakerIndexer extends Nanoresource {
 
     this.firehose = new FirehoseIndexer(this.db)
     this.subscriptions = new SubscriptionsIndexer(this.db)
-    this._indexers = [this.firehose, this.subscriptions]
+    this.backlinks = new BacklinksIndexer(this.db)
+    this._indexers = [this.firehose, this.subscriptions, this.backlinks]
   }
 
   async _close () {
@@ -107,7 +110,11 @@ module.exports = class BeakerIndexer extends Nanoresource {
     const key = urlToKey(url)
     const userDrive = hyperdrive(this.store, key)
     await userDrive.promises.ready()
-    this.networker.configure(userDrive.discoveryKey, { announce: false, lookup: true, flush: true })
+    this.networker.configure(userDrive.discoveryKey, {
+      announce: this._announceUserDrives,
+      lookup: true,
+      flush: true
+    })
     return userDrive
   }
 
@@ -216,7 +223,8 @@ module.exports = class BeakerIndexer extends Nanoresource {
 function getIndexerVersion () {
   return [
     SubscriptionsIndexer.VERSION,
-    FirehoseIndexer.VERSION
+    FirehoseIndexer.VERSION,
+    BacklinksIndexer.VERSION
   ].join()
 }
 
