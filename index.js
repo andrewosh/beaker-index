@@ -71,7 +71,11 @@ module.exports = class BeakerIndexer extends Nanoresource {
     await this.db.ready()
 
     const announce = this.core.writable
-    await this.networker.configure(this.core.discoveryKey, { announce, lookup: !announce })
+    await this.networker.configure(this.core.discoveryKey, {
+      announce,
+      lookup: !announce,
+      remember: true
+    })
     if (announce) {
       // TODO: This won't work with hyperspace.
       /*

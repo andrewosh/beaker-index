@@ -1,9 +1,14 @@
 const p = require('path')
 const repl = require('repl')
 const HypercloudClient = require('hypercloud-client')
+const { Client: HyperspaceClient } = require('hyperspace')
+
+const NAMESPACE = 'beaker-indexer'
+
 const BeakerIndexer = require('.')
 
 start()
+
 async function start () {
   const key = process.argv[3] ? Buffer.from(process.argv[3], 'hex') : null
   const cmd = process.argv[2]
@@ -29,7 +34,8 @@ async function start () {
     console.log('Deploying indexer as a cloud service...')
     const client = new HypercloudClient()
     const result = await client.services.spawn(p.join(__dirname, 'service'), { name: 'beaker-indexer' })
-    console.log('Indexer deployed. Running with key:', result.key)
+    console.log('Indexer deployed:')
+    console.log(JSON.stringify(result, null, 2))
   } else if (cmd === 'service-info') {
     const name = process.argv[3]
     if (!name) throw new Error('Must provide a service name.')
@@ -40,7 +46,14 @@ async function start () {
 }
 
 async function createIndexer (key) {
-  const indexer = new BeakerIndexer(null, null, key)
+  const client = new HyperspaceClient()
+  await client.ready()
+
+  const store = client.corestore().namespace(NAMESPACE)
+  const networker = client.network
+  await store.ready()
+
+  const indexer = new BeakerIndexer(store, networker, key)
 
   process.on('SIGINT', cleanup)
   process.on('SIGTERM', cleanup)
