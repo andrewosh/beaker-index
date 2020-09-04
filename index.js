@@ -154,9 +154,10 @@ module.exports = class BeakerIndexer extends Nanoresource {
     this.emit('indexing-user', user.url)
     const currentDriveVersion = drive.version
     let lastVersions = await this._getLastVersions(user.url)
+    let sameIndexerVersion = false
     if (lastVersions) {
       const sameDriveVersion = currentDriveVersion === lastVersions.drive
-      const sameIndexerVersion = this.indexerVersion === lastVersions.indexer
+      sameIndexerVersion = this.indexerVersion === lastVersions.indexer
       // TODO: Support incrementally updating each index individually.
       if (sameDriveVersion && sameIndexerVersion) {
         this.emit('skipping-user', user.url)
@@ -164,7 +165,9 @@ module.exports = class BeakerIndexer extends Nanoresource {
       }
     }
 
-    const lastDriveVersion = (lastVersions && lastVersions.drive) || 0
+    let lastDriveVersion = sameIndexerVersion ? (lastVersions && lastVersions.drive) : 0
+    lastDriveVersion = lastDriveVersion || 0
+
     const diffStream = drive.createDiffStream(lastDriveVersion, '/', { noMounts: true })
 
     const batch = []
