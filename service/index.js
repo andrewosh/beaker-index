@@ -12,6 +12,7 @@ async function start (client) {
     announceUserDrives: true
   })
   await indexer.ready()
+  global.indexer = indexer
 
   indexer.on('watching-user', url => console.log(`Watching User: ${url}`))
   indexer.on('user-changed', url => console.log(` ** User Changed: ${url}`))

@@ -16,6 +16,8 @@ const NAMESPACE = 'beaker-index'
 const NEW_USER_CHECK_INTERVAL = 1000 * 60 * 2
 const CONCURRENT_TASK_LIMIT = 100
 
+const INDEX_KEYS_PREFIX = 'index-keys'
+
 module.exports = class BeakerIndexer extends Nanoresource {
   constructor (store, networker, key, opts = {}) {
     super()
@@ -88,7 +90,12 @@ module.exports = class BeakerIndexer extends Nanoresource {
     this.firehose = new FirehoseIndexer(this.db)
     this.subscriptions = new SubscriptionsIndexer(this.db)
     this.backlinks = new BacklinksIndexer(this.db)
-    this._indexers = [this.firehose, this.subscriptions, this.backlinks]
+    this._indexers = [
+      // TODO: For now, only the backlinks indexer is in-use.
+      // this.firehose,
+      // this.subscriptions,
+      this.backlinks
+    ]
   }
 
   async _close () {
@@ -108,8 +115,8 @@ module.exports = class BeakerIndexer extends Nanoresource {
     let versionRecord = await this.db.get(this._lastVersionKey(url))
     if (!versionRecord) return null
     return versionRecord.value
-  }
-
+  } 
+ 
   async _loadDrive (url) {
     const key = urlToKey(url)
     const userDrive = hyperdrive(this.store, key)
@@ -122,18 +129,6 @@ module.exports = class BeakerIndexer extends Nanoresource {
     })
     return userDrive
   }
-
-    /*
-  async _getUsersList () {
-    let keys = (await fs.readFile('./output.txt', { encoding: 'utf8' })).split('\n')
-    keys = keys.filter(k => !!k)
-    return keys.map(k => ({
-      url: 'hyper://' + k,
-      title: 'blah',
-      description: 'blah'
-    }))
-  }
-  */
 
   async _getUsersList () {
     try {
@@ -148,6 +143,25 @@ module.exports = class BeakerIndexer extends Nanoresource {
       title: user.title,
       description: user.description
     }))
+  }
+
+  _createIndexKeysRecord (path, newRecords) {
+    return {
+      type: 'put',
+      key: toKey(INDEX_KEYS_PREFIX, path),
+      value: newRecords.map(r => r.key)
+    }
+  }
+
+  async _getDeletionRecords (path) {
+    const keysRecord = await this.db.get(toKey(INDEX_KEYS_PREFIX, path))
+    if (!keysRecord) return null
+    return keysRecord.value.map(key => {
+      return {
+        type: 'del',
+        key,
+      }
+    })
   }
 
   async _indexChanges (user, drive) {
@@ -172,6 +186,7 @@ module.exports = class BeakerIndexer extends Nanoresource {
 
     const batch = []
     var changes = null
+
     try {
       changes = await collectStream(diffStream, drive, { lastDriveVersion })
     } catch (err) {
@@ -179,25 +194,44 @@ module.exports = class BeakerIndexer extends Nanoresource {
       this.emit('indexing-error', err, user.url)
     }
     if (!changes) return null
+
     for (const change of changes) {
-      for (const indexer of this._indexers) {
-        var newRecords = []
-        try {
-          newRecords = await indexer.process(user, drive, change)
-        } catch (err) {
-          this.emit('indexing-error', err, user.url)
+      if (!change.name) continue
+      const path = normalizeUrl(user.url + '/' + change.name)
+      console.log('indexing:', path)
+      if (change.type === 'del') {
+        // Get the last index record keys, and delete them all.
+        const delRecords = await this._getDeletionRecords(path)
+        if (delRecords) batch.push(...delRecords)
+      } else if (change.type === 'put') {
+        for (const indexer of this._indexers) {
+          var newRecords = []
+          try {
+            newRecords = await indexer.process(user, drive, change)
+          } catch (err) {
+            this.emit('indexing-error', err, user.url)
+          }
+          console.log('new records:', newRecords)
+          batch.push(...newRecords)
+          // Save the keys of the last indexes for future deletion.
+          batch.push(this._createIndexKeysRecord(path, newRecords))
         }
-        batch.push(...newRecords)
+      } else {
+        // Don't index mount change types.
+        continue
       }
     }
 
+    console.log('BATCH:', batch)
+
+    // Record the last drive version that was indexed successfully.
     batch.push({ type: 'put', key: this._lastVersionKey(user.url), value: {
       drive: currentDriveVersion,
       indexer: this.indexerVersion
     }})
 
+    await dbBatch(this.db, batch)
     this.emit('indexed-user', user.url, batch)
-    return dbBatch(this.db, batch)
   }
 
   // Public Methods
@@ -229,6 +263,7 @@ module.exports = class BeakerIndexer extends Nanoresource {
 }
 
 function getIndexerVersion () {
+  // TODO: For now, only the backlinks indexer is in-use.
   return [
     SubscriptionsIndexer.VERSION,
     FirehoseIndexer.VERSION,

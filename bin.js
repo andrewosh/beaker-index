@@ -33,7 +33,9 @@ async function start () {
   } else if (cmd === 'deploy') {
     console.log('Deploying indexer as a cloud service...')
     const client = new HypercloudClient()
-    const result = await client.services.spawn(p.join(__dirname, 'service'), { name: 'beaker-indexer' })
+    const dir = process.argv[3] ? p.join(__dirname, process.argv[3]) : p.join(__dirname, 'service')
+    const name = process.argv[4] || 'beaker-indexer'
+    const result = await client.services.spawn(dir, { name })
     console.log('Indexer deployed:')
     console.log(JSON.stringify(result, null, 2))
   } else if (cmd === 'service-info') {
