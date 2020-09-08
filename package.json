@@ -9,10 +9,12 @@
   },
   "author": "Paul Frazee <pfrazee@gmail.com>",
   "license": "MIT",
+  "optionalDependencies": {
+    "get-urls": "^10.0.0"
+  },
   "dependencies": {
     "@corestore/networker": "^1.0.3",
     "corestore": "^5.7.3",
-    "get-urls": "^10.0.0",
     "got": "^11.5.2",
     "hyperbee": "^0.0.14",
     "hypercore-networking-timeouts": "^1.0.3",

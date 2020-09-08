@@ -10,6 +10,7 @@ const TaskQueue = require('./lib/queue')
 const FirehoseIndexer = require('./lib/indexers/firehose')
 const SubscriptionsIndexer = require('./lib/indexers/subscriptions')
 const BacklinksIndexer = require('./lib/indexers/backlinks')
+const IndexJsonIndexer = require('./lib/indexers/index-json')
 const { dbBatch, toKey, normalizeUrl, collectStream } = require('./lib/util')
 
 const NAMESPACE = 'beaker-index'
@@ -90,11 +91,12 @@ module.exports = class BeakerIndexer extends Nanoresource {
     this.firehose = new FirehoseIndexer(this.db)
     this.subscriptions = new SubscriptionsIndexer(this.db)
     this.backlinks = new BacklinksIndexer(this.db)
+    this.drives = new IndexJsonIndexer(this.db)
     this._indexers = [
-      // TODO: For now, only the backlinks indexer is in-use.
       // this.firehose,
       // this.subscriptions,
-      this.backlinks
+      this.backlinks,
+      this.drives
     ]
   }
 
@@ -222,8 +224,6 @@ module.exports = class BeakerIndexer extends Nanoresource {
       }
     }
 
-    console.log('BATCH:', batch)
-
     // Record the last drive version that was indexed successfully.
     batch.push({ type: 'put', key: this._lastVersionKey(user.url), value: {
       drive: currentDriveVersion,
@@ -263,11 +263,11 @@ module.exports = class BeakerIndexer extends Nanoresource {
 }
 
 function getIndexerVersion () {
-  // TODO: For now, only the backlinks indexer is in-use.
   return [
     SubscriptionsIndexer.VERSION,
     FirehoseIndexer.VERSION,
-    BacklinksIndexer.VERSION
+    BacklinksIndexer.VERSION,
+    IndexJsonIndexer.VERSION
   ].join()
 }
 
