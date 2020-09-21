@@ -1,6 +1,6 @@
 {
   "name": "beaker-index",
-  "version": "0.0.10",
+  "version": "0.0.11",
   "description": "An indexer driven from the beaker userlist",
   "main": "index.js",
   "scripts": {
