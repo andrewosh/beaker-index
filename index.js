@@ -11,6 +11,7 @@ const FirehoseIndexer = require('./lib/indexers/firehose')
 const SubscriptionsIndexer = require('./lib/indexers/subscriptions')
 const BacklinksIndexer = require('./lib/indexers/backlinks')
 const IndexJsonIndexer = require('./lib/indexers/index-json')
+const Archiver = require('./lib/indexers/archiver')
 const { dbBatch, toKey, normalizeUrl, collectStream } = require('./lib/util')
 
 const NAMESPACE = 'beaker-index'
@@ -31,6 +32,7 @@ module.exports = class BeakerIndexer extends Nanoresource {
     this.db = null
     this.firehose = null
     this.subscriptions = null
+    this.archiver = null
 
     this._queue = new TaskQueue({
       maxConcurrent: CONCURRENT_TASK_LIMIT,
@@ -92,9 +94,11 @@ module.exports = class BeakerIndexer extends Nanoresource {
     this.subscriptions = new SubscriptionsIndexer(this.db)
     this.backlinks = new BacklinksIndexer(this.db)
     this.drives = new IndexJsonIndexer(this.db)
+    this.archiver = new Archiver()
     this._indexers = [
       // this.firehose,
-      // this.subscriptions,
+      this.subscriptions,
+      this.archiver,
       this.backlinks,
       this.drives
     ]
@@ -267,7 +271,8 @@ function getIndexerVersion () {
     SubscriptionsIndexer.VERSION,
     FirehoseIndexer.VERSION,
     BacklinksIndexer.VERSION,
-    IndexJsonIndexer.VERSION
+    IndexJsonIndexer.VERSION,
+    Archiver.VERSION
   ].join()
 }
 
