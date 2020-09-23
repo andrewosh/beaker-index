@@ -1,6 +1,5 @@
 const p = require('path')
 const repl = require('repl')
-const HypercloudClient = require('hypercloud-client')
 const { Client: HyperspaceClient } = require('hyperspace')
 
 const NAMESPACE = 'beaker-indexer'
@@ -32,6 +31,7 @@ async function start () {
     r.context.indexer = indexer
   } else if (cmd === 'deploy') {
     console.log('Deploying indexer as a cloud service...')
+    const HypercloudClient = require('hypercloud-client')
     const client = new HypercloudClient()
     const dir = process.argv[3] ? p.join(__dirname, process.argv[3]) : p.join(__dirname, 'service')
     const name = process.argv[4] || 'beaker-indexer'
@@ -39,6 +39,7 @@ async function start () {
     console.log('Indexer deployed:')
     console.log(JSON.stringify(result, null, 2))
   } else if (cmd === 'service-info') {
+    const HypercloudClient = require('hypercloud-client')
     const name = process.argv[3]
     if (!name) throw new Error('Must provide a service name.')
     const client = new HypercloudClient()
